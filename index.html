@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thought Orbits</title>
+<meta name="description" content="Radial cause-and-effect maps: put a topic in the center, map its causes and effects in rings, run scenarios and check them against reality.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black stage, causes orbit on the left, effects on the right, center in the middle; panel floats right (bottom sheet on phones). Single dark look by design. Color only means direction of change. */
+:root{
+  --bg:#05060a; --surface:#0d0f15; --raise:#141720; --ink:#e7eaf0; --ink2:#b9bfcc; --mute:#7a8191; --rule:#1d212b; --neutral:#4b5262;
+  --pen:#4a76ff; --up:#ffb547; --down:#4cc3ff; --flat:#a7adb9; --warn:#ff6b6b; --ok:#7bd88f;
+  --f-ui:"Familjen Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%}
+body{margin:0;font-size:14px;background:var(--bg);color:var(--ink);font-family:var(--f-ui);overflow:hidden}
+[hidden]{display:none!important}
+#h-map{width:auto;font-size:13px;padding:6px 8px;max-width:220px}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr}
+header{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--rule)}
+.brand{font-weight:600;font-size:15px;letter-spacing:.01em}
+.brand span{color:var(--mute);font-weight:400;margin-left:6px}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:6px;padding:6px 10px;cursor:pointer;transition:border-color .15s,background .15s}
+button:hover{border-color:var(--mute)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+button.primary{background:var(--pen);border-color:var(--pen)}
+button.danger{color:var(--warn)}
+button[data-armed]{border-color:var(--warn);color:var(--warn)}
+button.on{background:var(--raise);border-color:var(--ink2)}
+.stage{position:relative;min-height:0}
+svg#map{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+svg#map:active{cursor:grabbing}
+.ring{fill:none;stroke:var(--rule);stroke-width:1.2;stroke-dasharray:.01 7;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.ringlbl,.side{fill:var(--mute);font-family:var(--f-mono)}
+.side{letter-spacing:.18em}
+.edge{stroke:var(--neutral);stroke-width:2.2;stroke-dasharray:.01 6;stroke-linecap:round;vector-effect:non-scaling-stroke;transition:opacity .2s}
+.edge.live{stroke:var(--ink2)}
+.arrow{fill:var(--ink2);transition:opacity .2s}
+.neg circle{fill:var(--bg);stroke:var(--warn);stroke-width:1;vector-effect:non-scaling-stroke}
+.neg text{fill:var(--warn);font-family:var(--f-mono);font-weight:500}
+.link{fill:none;stroke:var(--ink);stroke-width:1.3;stroke-dasharray:5 5;opacity:.55;vector-effect:non-scaling-stroke;transition:opacity .2s}
+.node{cursor:pointer;transition:opacity .2s}
+.node .dot{vector-effect:non-scaling-stroke}
+.node .halo,.node .shock,.node .miss{fill:none;vector-effect:non-scaling-stroke}
+.node .miss{stroke:var(--warn);stroke-width:1.4;stroke-dasharray:3 3}
+.node .hit{fill:transparent}
+.node text{fill:var(--ink)}
+.node.d2 text,.node.d3 text{fill:var(--ink2)}
+.node.linkfrom .halo{animation:spin 6s linear infinite;transform-box:fill-box;transform-origin:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dim{opacity:.12}
+.link.dim{opacity:.05}
+
+.panel{position:absolute;top:16px;right:16px;bottom:16px;width:350px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ph h2{margin:0;font-size:15px;font-weight:600}
+.deg{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.crumb{font-size:12px;color:var(--mute);line-height:1.4}
+.fld{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2)}
+.fld > span,.lab{display:flex;justify-content:space-between;gap:8px;letter-spacing:.05em;text-transform:uppercase;font-size:11px;color:var(--mute)}
+.fld b,.lab b{font-family:var(--f-mono);color:var(--ink);font-weight:500;text-transform:none;letter-spacing:0}
+input[type=text],textarea,select{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;width:100%;box-sizing:border-box}
+textarea{resize:vertical}
+input[type=range]{width:100%;accent-color:var(--pen)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+.seg button{padding:6px 4px;font-size:12px}
+.seg button.up.on{border-color:var(--up);color:var(--up)}
+.seg button.down.on{border-color:var(--down);color:var(--down)}
+.box{border:1px solid var(--rule);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.box > .lab:first-child{margin-bottom:-2px}
+.hint{font-size:12px;color:var(--mute);margin:0;line-height:1.45}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.sect{display:flex;flex-direction:column;gap:8px}
+.sect h3{margin:0;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;padding:4px 9px;border-radius:999px}
+.empty{font-size:13px;color:var(--mute);margin:0;line-height:1.45}
+.model{font-family:var(--f-mono);font-size:13px}
+.lrow{border:1px solid var(--rule);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.lrow .who{font-size:13px}
+.lrow .btns button,.lrow select{font-size:12px;padding:5px 8px;width:auto}
+.lrow input{font-size:13px;padding:6px 8px}
+.chain{text-align:left;display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:8px;line-height:1.45;font-size:13px}
+.chain .meta{font-family:var(--f-mono);font-size:11px;color:var(--mute)}
+.chain.on{border-color:var(--pen)}
+.check{display:grid;grid-template-columns:18px 1fr;gap:4px 8px;font-size:13px;line-height:1.45;padding:10px;border:1px solid var(--rule);border-radius:8px;text-align:left;cursor:pointer;background:transparent;color:var(--ink)}
+.check .ic{font-family:var(--f-mono);font-weight:500}
+.check .sub{grid-column:2;font-size:12px;color:var(--mute)}
+.check .why{grid-column:2;font-size:12px;color:var(--ink2)}
+.check.bad{border-color:color-mix(in srgb,var(--warn) 45%,var(--rule))}
+.u{color:var(--up)} .d{color:var(--down)} .f{color:var(--flat)} .w{color:var(--warn)} .g{color:var(--ok)}
+a{color:var(--ink2)}
+
+.spacer{position:absolute;top:16px;left:16px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:8px 12px;z-index:2;max-width:calc(100% - 32px);box-sizing:border-box}
+.spacer label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.spacer input{width:160px;accent-color:var(--pen)}
+.spacer output{font-family:var(--f-mono);font-size:12px;color:var(--ink);min-width:3.2em;text-align:right;font-variant-numeric:tabular-nums}
+.legend{position:absolute;left:16px;bottom:16px;font-family:var(--f-mono);font-size:11px;color:var(--mute);line-height:1.8;pointer-events:none;max-width:calc(100% - 400px)}
+.legend .k{color:var(--ink2)}
+.toast{position:absolute;top:16px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--pen);color:var(--ink);font-size:13px;padding:8px 14px;border-radius:8px;max-width:calc(100% - 32px);box-sizing:border-box;text-align:center;z-index:3}
+.modal{position:absolute;inset:0;background:rgba(5,6,10,.8);display:flex;align-items:center;justify-content:center;padding:16px;z-index:4}
+.modal .mbox{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px;width:min(600px,100%);display:flex;flex-direction:column;gap:10px}
+.modal h3{margin:0;font-size:14px}
+.modal textarea{height:46vh;font-family:var(--f-mono);font-size:12px}
+
+@media (max-width:720px){
+  .panel{top:auto;left:16px;right:16px;width:auto;max-height:58%}
+  .panel:not([hidden]) ~ .legend{display:none}
+  .legend{max-width:calc(100% - 32px)}
+  .brand span{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">Thought Orbits<span>causes on the left, effects on the right</span></div>
+    <div class="actions">
+      <select id="h-map" aria-label="Choose a map"></select>
+      <button id="h-ins">Insights</button>
+      <button id="h-fit">Fit</button>
+      <button id="h-copy">Copy outline</button>
+      <button id="h-export">Export file</button>
+      <button id="h-import">Import</button>
+      <button id="h-new">New map</button>
+      <button id="h-ex">Reset to file</button>
+    </div>
+  </header>
+  <div class="stage" id="stage">
+    <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Cause and effect map"><g id="world"></g></svg>
+    <div class="spacer"><label for="f-spread">Spacing</label><input type="range" id="f-spread" min="0.7" max="2.5" step="0.05" value="1"><output id="o-spread">100%</output></div>
+    <aside class="panel" id="panel" hidden></aside>
+    <div class="legend" id="legend"></div>
+    <div class="toast" id="toast" hidden></div>
+    <div class="modal" id="modal" hidden>
+      <div class="mbox">
+        <h3 id="m-title">Outline</h3>
+        <p class="hint" id="m-hint" hidden></p>
+        <textarea id="m-text" readonly></textarea>
+        <div class="btns"><button class="primary" id="m-copy">Copy</button><button class="primary" id="m-load" hidden>Load this map</button><button id="m-close">Close</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const svg=$('#map'), world=$('#world');
+const PREFIX='thought-orbits-v2:';
+let KEY=PREFIX+'ram-prices', SLUG='ram-prices', BASE=null, MAPS=[];
+const clone=o=>JSON.parse(JSON.stringify(o));
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let uidN=Date.now(); const uid=()=>'u'+(uidN++).toString(36);
+const GL={up:'▲',down:'▼',flat:'='};
+const CL={up:'u',down:'d',flat:'f'};
+
+let S, N={}, P={}, V={}, PRED={}, SIM=null;
+let sel=null, hover=null, linkFrom=null, mode=null, focusPath=null, chainKey=null;
+let view={x:0,y:0,k:1}, W=0, H=0, lastLs=null;
+
+/* ---------- example: RAM prices, seeded with observed 2026 data ---------- */
+function example(){
+  const nodes=[]; let i=0;
+  const add=(label,parent,flow,sign,w,extra={})=>{const id='e'+(i++);nodes.push(Object.assign({id,label,parent,flow,sign,w,note:'',shock:0,obs:'',fig:'',src:'',url:''},extra));return id;};
+  const TF='https://www.trendforce.com/presscenter/news/20260514-13044.html';
+  const TC='https://www.telecoms.com/mobile-devices/memory-meltdown-leads-to-6-decline-in-global-smartphone-shipments';
+  const IDC='https://alfi.dev.theedgesingapore.com/news/semiconductor/smartphone-market-set-shrink-13-due-memory-chip-crisis-idc-says';
+  const R=add('RAM prices',null,null,1,5,{note:'Contract prices for DRAM and NAND.',obs:'up',fig:'Mobile DRAM +78–83% QoQ in 2Q26',src:'TrendForce, May 2026',url:TF});
+  // causes
+  const ai=add('AI data center buildout',R,'in',1,5,{shock:1,obs:'up',note:'Accelerators pair GPUs with stacked high-bandwidth memory (HBM).'});
+    const cap=add('Hyperscaler capex',ai,'in',1,5);
+      add('Interest rates',cap,'in',-1,3);
+    add('AI usage & inference',ai,'in',1,4);
+    add('Power & grid limits',ai,'in',-1,3,{note:'Sites that cannot get power cannot install memory.'});
+  const hbm=add('Wafers shifted to HBM',R,'in',1,5,{note:'Every wafer making HBM is a wafer not making phone or PC memory.'});
+    add('Advanced packaging capacity',hbm,'in',1,3);
+  const out=add('Memory maker output',R,'in',-1,5,{note:'More supply, lower price.'});
+    add('Capex discipline',out,'in',-1,4);
+    const cn=add('Chinese producers',out,'in',1,3);
+      add('Export controls',cn,'in',-1,3);
+  add('Inventory levels',R,'in',-1,4);
+  // effects
+  const pm=add('Phone memory cost',R,'out',1,5,{obs:'up',fig:'+300% in Q2 2026',src:'Counterpoint via Telecoms.com, Jul 2026',url:TC});
+    const lp=add('Low-end phone prices',pm,'out',1,5,{note:'Memory is a bigger share of the bill of materials in cheap phones.'});
+      const lu=add('Low-end phone units',lp,'out',-1,5,{obs:'down',fig:'Sub-$100 phones now uneconomical',src:'IDC via The Edge Singapore, Feb 2026',url:IDC});
+    const ip=add('iPhone prices',pm,'out',1,3,{obs:'up',fig:'iPhone 18 expected to cost more',src:'Telecoms.com, Jul 2026',url:TC});
+      add('iPhone units',ip,'out',-1,2,{obs:'up',fig:'+23% YoY in Q2 2026',src:'Omdia via Telecoms.com, Jul 2026',url:TC,note:'Channel partners stocked up on iPhone 17 ahead of expected price increases. This is pull-forward demand, so expect weaker quarters later.'});
+    const gs=add('Global smartphone units',pm,'out',-1,4,{obs:'down',fig:'−6% YoY Q2 2026; IDC sees −12.9% for 2026',src:'Omdia via Telecoms.com, Jul 2026; IDC, Feb 2026',url:TC});
+  const pc=add('PC & laptop prices',R,'out',1,4);
+    add('PC units',pc,'out',-1,3);
+  const sv=add('Cloud server costs',R,'out',1,3);
+    add('AI service pricing',sv,'out',1,2);
+  const pr=add('Memory maker profits',R,'out',1,5);
+    const mc=add('Memory capex',pr,'out',1,4);
+  add('Car electronics cost',R,'out',1,2);
+  const links=[
+    {a:ai,b:hbm,sign:1,w:5,note:'Every accelerator needs stacked HBM.'},
+    {a:mc,b:out,sign:1,w:4,note:'New fabs add output with a multi-year lag. This loop is what ends memory booms.'},
+    {a:lu,b:gs,sign:1,w:5,note:'Low-end phones are a large share of global units.'}
+  ];
+  return {nodes,links};
+}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.nodes)&&Array.isArray(s.links)&&s.nodes.some(n=>!n.parent))return s;}catch(e){}return null;}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+const idx=()=>{N={};S.nodes.forEach(n=>N[n.id]=n);};
+const rootNode=()=>S.nodes.find(n=>!n.parent);
+
+/* ---------- graph + simulation ---------- */
+function edges(){
+  const E=[];
+  S.nodes.forEach(n=>{ if(!n.parent||!N[n.parent])return;
+    const e={sign:n.sign||1,w:n.w||3,kind:'tree',id:'t'+n.id};
+    if(n.flow==='in'){e.a=n.id;e.b=n.parent;} else {e.a=n.parent;e.b=n.id;}
+    E.push(e); });
+  S.links.forEach((l,i)=>{ if(N[l.a]&&N[l.b]) E.push({a:l.a,b:l.b,sign:l.sign||1,w:l.w||3,kind:'link',id:'L'+i,li:i}); });
+  return E;
+}
+function simulate(){
+  const E=edges(), out={}; S.nodes.forEach(n=>out[n.id]=[]); E.forEach(e=>out[e.a].push(e));
+  const srcs=S.nodes.filter(n=>n.shock);
+  const reach=new Set(), onStack=new Set(), back=new Set();
+  const dfs=id=>{reach.add(id);onStack.add(id);for(const e of out[id]){if(onStack.has(e.b)){back.add(e);continue;}if(!reach.has(e.b))dfs(e.b);}onStack.delete(id);};
+  srcs.forEach(n=>{if(!reach.has(n.id))dfs(n.id);});
+  const fwd=E.filter(e=>reach.has(e.a)&&reach.has(e.b)&&!back.has(e));
+  const indeg={}, fo={}; reach.forEach(id=>{indeg[id]=0;fo[id]=[];});
+  fwd.forEach(e=>{indeg[e.b]++;fo[e.a].push(e);});
+  V={}; PRED={}; const best={};
+  reach.forEach(id=>V[id]=N[id].shock||0);
+  const q=[...reach].filter(id=>indeg[id]===0);
+  while(q.length){
+    const id=q.shift(); V[id]=Math.max(-1,Math.min(1,V[id]));
+    for(const e of fo[id]){ const c=V[id]*e.sign*e.w/5; V[e.b]+=c;
+      if(best[e.b]===undefined||Math.abs(c)>best[e.b]){best[e.b]=Math.abs(c);PRED[e.b]={from:id,edge:e.id};}
+      if(--indeg[e.b]===0) q.push(e.b); }
+  }
+  // chains: best path back to a source, for sinks and observed nodes
+  const pathTo=id=>{const p=[id];const seen=new Set([id]);let c=id;while(PRED[c]&&!seen.has(PRED[c].from)){c=PRED[c].from;p.unshift(c);seen.add(c);}return p;};
+  const ends=[...reach].filter(id=>!N[id].shock&&Math.abs(V[id])>=0.1&&(fo[id].length===0||N[id].obs));
+  let paths=ends.map(id=>pathTo(id)).sort((a,b)=>b.length-a.length);
+  const kept=[]; for(const p of paths){ const k=p.join('>'); if(!kept.some(q=>q.join('>').startsWith(k+'>'))) kept.push(p); }
+  const chains=kept.map(p=>({path:p,v:V[p[p.length-1]]})).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v)).slice(0,8);
+  // reality check
+  const checks=S.nodes.filter(n=>n.obs).map(n=>{
+    const v=V[n.id]; const reached=v!==undefined&&!n.shock;
+    const exp=!reached?null:Math.abs(v)<0.1?'flat':v>0?'up':'down';
+    let status='none'; if(n.shock) status='input'; else if(exp) status=(exp===n.obs)?'ok':'bad';
+    return {n,v,exp,status};
+  }).sort((a,b)=>({bad:0,ok:1,none:2,input:3}[a.status]-{bad:0,ok:1,none:2,input:3}[b.status]));
+  // feedback loops (simple cycles up to length 7)
+  const loops=[], seenL=new Set();
+  const all={}; S.nodes.forEach(n=>all[n.id]=[]); E.forEach(e=>all[e.a].push(e));
+  S.nodes.forEach(st=>{ const walk=(id,path,sgn)=>{ if(path.length>7)return; for(const e of all[id]){ if(e.b===st.id&&path.length>1){const key=[...path].sort().join('|');if(!seenL.has(key)){seenL.add(key);loops.push({path:[...path,st.id],sign:sgn*e.sign});}} else if(!path.includes(e.b)) walk(e.b,[...path,e.b],sgn*e.sign);} }; walk(st.id,[st.id],1); });
+  SIM={srcs,chains,checks,loops,back};
+}
+const strength=v=>{const a=Math.abs(v);return a>=0.6?'strong':a>=0.3?'moderate':a>=0.1?'weak':'none';};
+const dirOf=v=>v===undefined||Math.abs(v)<0.1?null:v>0?'up':'down';
+const pct=v=>`${v>0?'+':'−'}${Math.round(Math.abs(v)*100)}%`;
+
+/* ---------- layout ---------- */
+let spread=1; try{const s=parseFloat(localStorage.getItem('thought-orbits-spread'));if(s>=0.7&&s<=2.5)spread=s;}catch(e){}
+const ringR=d=>d===0?0:(150+(d-1)*140)*spread;
+function setSpread(v){
+  const old=spread; spread=v; const f=spread/old;
+  view.x*=f; view.y*=f;
+  $('#o-spread').textContent=Math.round(spread*100)+'%';
+  try{localStorage.setItem('thought-orbits-spread',String(spread));}catch(e){}
+  render();
+}
+$('#f-spread').value=spread; $('#o-spread').textContent=Math.round(spread*100)+'%';
+$('#f-spread').oninput=e=>setSpread(parseFloat(e.target.value));
+function layout(){
+  P={}; const kids={}; S.nodes.forEach(n=>kids[n.id]=[]);
+  const root=rootNode();
+  S.nodes.forEach(n=>{if(n.parent&&kids[n.parent])kids[n.parent].push(n);});
+  const leaves=n=>{const k=kids[n.id];const v=k.length?k.reduce((s,c)=>s+leaves(c),0):1;P[n.id]={leaves:v};return v;};
+  leaves(root);
+  const place=(n,a0,a1,d,side)=>{
+    const a=(a0+a1)/2, r=ringR(d);
+    Object.assign(P[n.id],{a,d,x:r*Math.cos(a),y:r*Math.sin(a),side,kids:kids[n.id].map(c=>c.id)});
+    let cur=a0; kids[n.id].forEach(c=>{const span=(a1-a0)*P[c.id].leaves/P[n.id].leaves;place(c,cur,cur+span,d+1,side);cur+=span;});
+  };
+  Object.assign(P[root.id],{a:-Math.PI/2,d:0,x:0,y:0,side:'center',kids:kids[root.id].map(c=>c.id)});
+  const k1=kids[root.id], causes=k1.filter(c=>c.flow==='in'), effects=k1.filter(c=>c.flow!=='in');
+  const sector=(list,a0,a1)=>{const tot=list.reduce((s,c)=>s+P[c.id].leaves,0)||1;let cur=a0;list.forEach(c=>{const span=(a1-a0)*P[c.id].leaves/tot;place(c,cur,cur+span,1,c.flow==='in'?'cause':'effect');cur+=span;});};
+  if(causes.length&&effects.length){sector(effects,-Math.PI/2,Math.PI/2);sector(causes,3*Math.PI/2,Math.PI/2);}
+  else sector(k1,-Math.PI/2,3*Math.PI/2);
+  return {causes:causes.length,effects:effects.length};
+}
+function wrap(t,max){
+  const words=String(t).split(/\s+/).filter(Boolean); const lines=[]; let cur='';
+  for(const w of words){ if(cur&&(cur+' '+w).length>max){lines.push(cur);cur=w;} else cur=cur?cur+' '+w:w; }
+  if(cur)lines.push(cur); return lines.length?lines.slice(0,3):['Untitled'];
+}
+const labelScale=()=>Math.pow(Math.min(2.4,Math.max(1,1/view.k)),0.8);
+function nodeR(n,d,ls){ if(d===0) return 46*Math.min(ls,1.5); const base=[0,18,11,7.5,6][Math.min(d,4)]; return base*(0.7+0.12*(n.w||3)); }
+const trunc=(s,m)=>s.length>m?s.slice(0,m-1)+'…':s;
+
+/* ---------- render ---------- */
+function render(){
+  idx(); const sides=layout(); simulate();
+  const ls=labelScale(); lastLs=ls;
+  let maxD=0; for(const id in P) if(P[id].d!==undefined) maxD=Math.max(maxD,P[id].d);
+  let h='';
+  for(let d=1;d<=maxD;d++){const r=ringR(d);h+=`<circle class="ring" r="${r}"/><text class="ringlbl" x="0" y="${-r-8}" text-anchor="middle" style="font-size:${12*ls}px">${d}°</text>`;}
+  if(sides.causes&&sides.effects&&maxD){const R=ringR(maxD)+70;h+=`<text class="side" x="${-R*0.62}" y="${-R}" text-anchor="middle" style="font-size:${12*ls}px">◀ CAUSES</text><text class="side" x="${R*0.62}" y="${-R}" text-anchor="middle" style="font-size:${12*ls}px">EFFECTS ▶</text>`;}
+  const E=edges(); let deco='';
+  const live=new Set(Object.values(PRED).map(p=>p.edge));
+  E.forEach(e=>{ const a=P[e.a], b=P[e.b]; if(!a||!b||a.d===undefined||b.d===undefined)return;
+    const tri=(x,y,ang)=>{const s=5.5*ls;return `<polygon class="arrow" data-a="${e.a}" data-b="${e.b}" points="${x+Math.cos(ang)*s},${y+Math.sin(ang)*s} ${x+Math.cos(ang+2.5)*s},${y+Math.sin(ang+2.5)*s} ${x+Math.cos(ang-2.5)*s},${y+Math.sin(ang-2.5)*s}"/>`;};
+    const neg=(x,y)=>`<g class="neg" data-a="${e.a}" data-b="${e.b}"><circle cx="${x}" cy="${y}" r="${6*ls}"/><text x="${x}" y="${y+3.6*ls}" text-anchor="middle" style="font-size:${11*ls}px">−</text></g>`;
+    if(e.kind==='tree'){
+      h+=`<line class="edge${live.has(e.id)?' live':''}" data-a="${e.a}" data-b="${e.b}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+      const ang=Math.atan2(b.y-a.y,b.x-a.x);
+      deco+=tri(a.x+(b.x-a.x)*0.56,a.y+(b.y-a.y)*0.56,ang);
+      if(e.sign<0) deco+=neg(a.x+(b.x-a.x)*0.36,a.y+(b.y-a.y)*0.36);
+    } else {
+      const cx=(a.x+b.x)*0.3, cy=(a.y+b.y)*0.3, B=t=>[(1-t)*(1-t)*a.x+2*(1-t)*t*cx+t*t*b.x,(1-t)*(1-t)*a.y+2*(1-t)*t*cy+t*t*b.y];
+      const D=t=>[2*(1-t)*(cx-a.x)+2*t*(b.x-cx),2*(1-t)*(cy-a.y)+2*t*(b.y-cy)];
+      h+=`<path class="link" data-a="${e.a}" data-b="${e.b}" d="M${a.x} ${a.y} Q${cx} ${cy} ${b.x} ${b.y}"/>`;
+      const [px,py]=B(0.6),[dx,dy]=D(0.6); deco+=tri(px,py,Math.atan2(dy,dx));
+      if(e.sign<0){const [nx,ny]=B(0.4);deco+=neg(nx,ny);}
+    }
+  });
+  h+=deco;
+  const bad=new Set(SIM.checks.filter(c=>c.status==='bad').map(c=>c.n.id));
+  const order=S.nodes.filter(n=>P[n.id]&&P[n.id].d!==undefined).sort((a,b)=>P[b.id].d-P[a.id].d);
+  for(const n of order){
+    const p=P[n.id], r=nodeR(n,p.d,ls), v=V[n.id], dir=dirOf(v), isSel=n.id===sel;
+    const col=dir?`var(--${dir})`:(p.d===0?'var(--pen)':'var(--neutral)');
+    const fillA=dir?(0.12+0.5*Math.abs(v)):0;
+    const fill=dir?`fill:var(--${dir});fill-opacity:${fillA.toFixed(2)}`:'fill:var(--bg)';
+    const arrow=dir?`<tspan style="fill:var(--${dir})">${GL[dir]} </tspan>`:'';
+    const obsLine=n.obs?`seen ${GL[n.obs]} ${trunc(n.fig||'',26)}`:'';
+    let t='';
+    if(p.d===0){
+      const fs=14*Math.min(ls,1.5), lh=fs*1.15, lines=wrap(n.label,11), y0=-(lines.length-1)*lh/2+fs*0.35;
+      t=`<text text-anchor="middle" style="font-size:${fs}px;font-weight:600">`+lines.map((s,i)=>`<tspan x="0" y="${y0+i*lh}">${esc(s)}</tspan>`).join('')+'</text>';
+      if(obsLine) t+=`<text text-anchor="middle" y="${r+fs*1.3}" style="font-size:${fs*0.78}px;font-family:var(--f-mono);fill:var(--${n.obs})">${esc(obsLine)}</text>`;
+    } else {
+      const fs=[0,13,11.5,10.5,10][Math.min(p.d,4)]*ls, lh=fs*1.15, lines=wrap(n.label,16);
+      const all=lines.length+(obsLine?1:0);
+      const c=Math.cos(p.a), s=Math.sin(p.a), off=r+7*ls, lx=c*off, ly=s*off;
+      const anchor=c>0.35?'start':c<-0.35?'end':'middle';
+      const y0=anchor==='middle'?(s>0?ly+fs:ly-(all-1)*lh-3):ly-(all-1)*lh/2+fs*0.35;
+      t=`<text text-anchor="${anchor}" style="font-size:${fs}px;font-weight:${p.d===1?500:400}">`+lines.map((x,i)=>`<tspan x="${lx}" y="${y0+i*lh}">${i===0?arrow:''}${esc(x)}</tspan>`).join('')
+        +(obsLine?`<tspan x="${lx}" y="${y0+lines.length*lh}" style="font-size:${fs*0.8}px;font-family:var(--f-mono);fill:var(--${n.obs})">${esc(obsLine)}</tspan>`:'')+'</text>';
+    }
+    const halo=(isSel||n.id===linkFrom)?`<circle class="halo" r="${r+(n.shock?11:6)}" style="stroke:var(--ink2);stroke-width:1;stroke-dasharray:2 3"/>`:'';
+    const shock=n.shock?`<circle class="shock" r="${r+4}" style="stroke:var(--${n.shock>0?'up':'down'});stroke-width:2.4"/>`:'';
+    const miss=bad.has(n.id)?`<circle class="miss" r="${r+(n.shock?8:4)}"/>`:'';
+    h+=`<g class="node d${Math.min(p.d,3)}${n.id===linkFrom?' linkfrom':''}" data-id="${n.id}" transform="translate(${p.x} ${p.y})"><circle class="hit" r="${Math.max(r+8,18)}"/>${halo}${shock}${miss}<circle class="dot" r="${r}" style="stroke:${col};stroke-width:${p.d===0?3:1.8};${fill}"/>${t}</g>`;
+  }
+  world.innerHTML=h;
+  applyTransform(); applyFocus(); renderLegend();
+}
+function applyTransform(){world.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.k})`);}
+let raf=0;
+function schedule(){if(raf)return;raf=requestAnimationFrame(()=>{raf=0;if(Math.abs(labelScale()-lastLs)>0.02)render();else applyTransform();});}
+
+function related(id){
+  const set=new Set([id]); let cur=N[id];
+  while(cur&&cur.parent){set.add(cur.parent);cur=N[cur.parent];}
+  const st=[id]; while(st.length){const x=st.pop();(P[x]?.kids||[]).forEach(k=>{set.add(k);st.push(k);});}
+  S.links.forEach(l=>{if(l.a===id)set.add(l.b);if(l.b===id)set.add(l.a);});
+  return set;
+}
+function applyFocus(){
+  let set=null, pair=null;
+  if(focusPath){ set=new Set(focusPath); pair=new Set(); for(let i=0;i<focusPath.length-1;i++){pair.add(focusPath[i]+'>'+focusPath[i+1]);pair.add(focusPath[i+1]+'>'+focusPath[i]);} }
+  else { const id=hover||sel; if(id) set=related(id); }
+  const edgeOn=el=>pair?pair.has(el.dataset.a+'>'+el.dataset.b):(set.has(el.dataset.a)&&set.has(el.dataset.b));
+  world.querySelectorAll('.node').forEach(el=>el.classList.toggle('dim',!!set&&!set.has(el.dataset.id)));
+  world.querySelectorAll('.edge,.arrow,.neg,.link').forEach(el=>el.classList.toggle('dim',!!set&&!edgeOn(el)));
+}
+function renderLegend(){
+  $('#legend').innerHTML=`<div><span class="u">▲ rising</span> · <span class="d">▼ falling</span> · fill strength = model's expected effect</div>
+  <div><span class="k">► on a line</span> = what pushes what · <span class="w">−</span> = pushes the opposite way · thick ring = scenario input · <span class="w">red dashed ring</span> = model and reality disagree</div>`;
+}
+
+/* ---------- panel ---------- */
+const isWide=()=>window.innerWidth>720;
+function renderPanel(){
+  const panel=$('#panel');
+  $('#h-ins').classList.toggle('on',mode==='insights');
+  if(mode==='node'&&N[sel]) return nodePanel(panel,N[sel]);
+  if(mode==='insights') return insightsPanel(panel);
+  panel.hidden=true;
+}
+const nm=id=>esc(N[id]?.label||'');
+const dirSpan=(d,txt)=>d?`<span class="${CL[d]}">${GL[d]}${txt?' '+txt:''}</span>`:'<span class="f">·</span>';
+function insightsPanel(panel){
+  panel.hidden=false;
+  const root=rootNode();
+  const shocks=SIM.srcs.map(n=>`<button class="chip" data-go="${n.id}"><span class="${n.shock>0?'u':'d'}">${n.shock>0?'▲':'▼'}</span> ${esc(n.label)}</button>`).join('');
+  const chains=SIM.chains.map((c,i)=>{const key=c.path.join('>');
+    const txt=c.path.map(id=>`${nm(id)} ${dirSpan(dirOf(V[id]))}`).join(' <span class="f">→</span> ');
+    return `<button class="chain${chainKey===key?' on':''}" data-chain="${i}"><span>${txt}</span><span class="meta">end effect ${pct(c.v)} of the push · ${strength(c.v)} · ${c.path.length-1} steps</span></button>`;}).join('');
+  const checks=SIM.checks.filter(c=>c.status!=='input').map(c=>{
+    const ic=c.status==='ok'?'<span class="ic g">✓</span>':c.status==='bad'?'<span class="ic w">!</span>':'<span class="ic f">?</span>';
+    const model=c.exp?`Model ${dirSpan(c.exp,strength(c.v))}`:'Model: not reached by this scenario';
+    const why=c.status==='bad'?`<span class="why">${c.n.note?esc(c.n.note):'Something outside the map is acting here. Add it as a cause.'}</span>`:'';
+    return `<button class="check${c.status==='bad'?' bad':''}" data-go="${c.n.id}">${ic}<span>${esc(c.n.label)}</span><span class="sub">${model} · Seen ${dirSpan(c.n.obs,esc(c.n.fig||''))}</span>${why}</button>`;}).join('');
+  const loops=SIM.loops.slice(0,5).map(l=>`<p class="empty"><span class="${l.sign>0?'u':'d'}">${l.sign>0?'Reinforcing':'Balancing'}</span>: ${l.path.map(nm).join(' → ')}. ${l.sign>0?'Feeds on itself and can run away.':'Pushes back against the trend over time.'}</p>`).join('');
+  const nObs=SIM.checks.filter(c=>c.status==='ok'||c.status==='bad').length, nOk=SIM.checks.filter(c=>c.status==='ok').length;
+  panel.innerHTML=`
+    <div class="ph"><h2>What the map says</h2>${isWide()?'':'<button id="p-close">Close</button>'}</div>
+    <div class="sect"><h3>Scenario inputs</h3>${shocks?`<div class="chips">${shocks}</div>`:'<p class="empty">Tap any idea and push it up or down. The map then shows what follows.</p>'}</div>
+    ${SIM.srcs.length?`<div class="sect"><h3>Strongest chains</h3>${chains||'<p class="empty">Nothing downstream yet. Add effects with arrows pointing away from the input.</p>'}</div>`:''}
+    <div class="sect"><h3>Reality check${nObs?` · ${nOk} of ${nObs} match`:''}</h3>${checks||'<p class="empty">Add what you have actually seen (rising, falling, a figure and a source) to any idea. The map will flag where its logic and reality disagree. Those gaps are usually the insight.</p>'}</div>
+    ${loops?`<div class="sect"><h3>Feedback loops</h3>${loops}</div>`:''}
+    <p class="hint">How it calculates: each arrow passes on its strength × 20% of the change, flipped on a − arrow. Effects that meet add up, capped at 100%. Loops are listed but not run, so read this as the first wave of effects.</p>
+  `;
+  const pc=$('#p-close'); if(pc) pc.onclick=()=>{mode=null;focusPath=null;chainKey=null;render();renderPanel();};
+  panel.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{sel=b.dataset.go;mode='node';focusPath=null;chainKey=null;render();renderPanel();});
+  panel.querySelectorAll('[data-chain]').forEach(b=>b.onclick=()=>{const c=SIM.chains[+b.dataset.chain];const key=c.path.join('>');
+    if(chainKey===key){chainKey=null;focusPath=null;}else{chainKey=key;focusPath=c.path;} applyFocus();renderPanel();});
+}
+function nodePanel(panel,n){
+  panel.hidden=false;
+  const p=P[n.id], root=rootNode(), par=n.parent?N[n.parent]:null;
+  const path=[]; let cur=n; while(cur){path.unshift(cur.label);cur=cur.parent?N[cur.parent]:null;}
+  const kids=(p.kids||[]).map(id=>N[id]).filter(Boolean);
+  const links=S.links.map((l,i)=>({l,i})).filter(o=>o.l.a===n.id||o.l.b===n.id);
+  let desc=0; const st=[n.id]; while(st.length){const x=st.pop();(P[x]?.kids||[]).forEach(k=>{desc++;st.push(k);});}
+  const v=V[n.id], d=dirOf(v);
+  const driver=n.flow==='in'?n:par, driven=n.flow==='in'?par:n;
+  const seg=(name,opts,val)=>`<div class="seg">${opts.map(o=>`<button data-${name}="${o[0]}" class="${o[2]||''}${String(val)===String(o[0])?' on':''}">${o[1]}</button>`).join('')}</div>`;
+  panel.innerHTML=`
+    <div class="ph"><span class="deg">${p.d===0?'Center':`${p.d}° ${n.flow==='in'?'cause':'effect'}`}</span><button id="p-close">${isWide()?'Back to insights':'Close'}</button></div>
+    ${p.d>0?`<div class="crumb">${path.map(esc).join(' › ')}</div>`:''}
+    <label class="fld"><span>${p.d===0?'Topic being analyzed':'Idea'}</span><input type="text" id="f-label" value="${esc(n.label)}"></label>
+    ${par?`<div class="box"><span class="lab">How it connects</span>
+      ${seg('flow',[['in',`It drives ${esc(par.label)}`],['out',`${esc(par.label)} drives it`]],n.flow)}
+      <span class="lab">When ${esc(driver.label)} rises, ${esc(driven.label)}…</span>
+      ${seg('sign',[[1,'rises too (+)','up'],[-1,'falls (−)','down']],n.sign)}
+      <label class="fld"><span>Strength <b id="w-val">${n.w}/5 · passes on ${n.w*20}%</b></span><input type="range" id="f-w" min="1" max="5" step="1" value="${n.w}"></label>
+    </div>`:''}
+    <div class="box"><span class="lab">Scenario: push this</span>
+      ${seg('shock',[[-1,'▼ Down','down'],[0,'No push'],[1,'▲ Up','up']],n.shock||0)}
+      <span class="lab">Model expects <b class="model">${n.shock?'scenario input':d?`<span class="${CL[d]}">${GL[d]} ${strength(v)} (${pct(v)})</span>`:'no change'}</b></span>
+    </div>
+    <div class="box"><span class="lab">Seen in reality</span>
+      ${seg('obs',[['down','▼','down'],['flat','='],['up','▲','up'],['','Unknown']],n.obs||'')}
+      <input type="text" id="f-fig" placeholder="Figure, e.g. −6% YoY in Q2 2026" value="${esc(n.fig||'')}">
+      <input type="text" id="f-src" placeholder="Source and date" value="${esc(n.src||'')}">
+      ${n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener" style="font-size:12px">Open source</a>`:''}
+    </div>
+    <label class="fld"><span>Notes</span><textarea id="f-note" rows="3" placeholder="Why does it connect? What could break the link?">${esc(n.note||'')}</textarea></label>
+    <div class="btns"><button class="primary" data-add="in">Add a cause</button><button class="primary" data-add="out">Add an effect</button><button id="b-link">Link across</button></div>
+    <div class="sect"><h3>Cross-links (${links.length})</h3>${links.length?links.map(o=>{const l=o.l;return `<div class="lrow"><span class="who">${nm(l.a)} → ${nm(l.b)}</span>
+      <div class="btns"><button data-lflip="${o.i}">Flip direction</button><button data-lsign="${o.i}" class="${l.sign<0?'w':''}">${l.sign<0?'− opposite':'+ same'}</button><select data-lw="${o.i}" aria-label="Strength">${[1,2,3,4,5].map(x=>`<option value="${x}"${x===l.w?' selected':''}>${x}/5</option>`).join('')}</select><button data-unlink="${o.i}" class="danger">Remove</button></div>
+      <input type="text" data-lnote="${o.i}" placeholder="How are they related?" value="${esc(l.note||'')}"></div>`;}).join(''):'<p class="empty">Link to an idea in another branch to capture a hidden connection.</p>'}</div>
+    <div class="sect"><h3>Next ring out (${kids.length})</h3>${kids.length?`<div class="chips">${kids.map(k=>`<button class="chip" data-go="${k.id}">${k.flow==='in'?'◀':'▶'} ${esc(k.label)}</button>`).join('')}</div>`:'<p class="empty">Nothing yet.</p>'}
+      ${par?`<div class="chips"><button class="chip" data-go="${par.id}">Up to ${esc(par.label)}</button></div>`:''}</div>
+    ${p.d>0?`<button class="danger" id="b-del">Delete${desc?` with ${desc} connected idea${desc>1?'s':''}`:''}</button>`:''}
+  `;
+  const re=()=>{save();render();renderPanel();};
+  $('#p-close').onclick=()=>{sel=null;mode=isWide()?'insights':null;render();renderPanel();};
+  $('#f-label').oninput=e=>{n.label=e.target.value;save();render();};
+  $('#f-note').oninput=e=>{n.note=e.target.value;save();};
+  $('#f-fig').oninput=e=>{n.fig=e.target.value;save();render();};
+  $('#f-src').oninput=e=>{n.src=e.target.value;save();};
+  const w=$('#f-w'); if(w) w.oninput=e=>{n.w=+e.target.value;$('#w-val').textContent=`${n.w}/5 · passes on ${n.w*20}%`;save();render();};
+  panel.querySelectorAll('[data-flow]').forEach(b=>b.onclick=()=>{n.flow=b.dataset.flow;re();});
+  panel.querySelectorAll('[data-sign]').forEach(b=>b.onclick=()=>{n.sign=+b.dataset.sign;re();});
+  panel.querySelectorAll('[data-shock]').forEach(b=>b.onclick=()=>{n.shock=+b.dataset.shock;re();});
+  panel.querySelectorAll('[data-obs]').forEach(b=>b.onclick=()=>{n.obs=b.dataset.obs;re();});
+  panel.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const c={id:uid(),label:b.dataset.add==='in'?'New cause':'New effect',parent:n.id,flow:b.dataset.add,sign:1,w:3,note:'',shock:0,obs:'',fig:'',src:'',url:''};S.nodes.push(c);sel=c.id;re();const f=$('#f-label');f.focus();f.select();});
+  $('#b-link').onclick=()=>{linkFrom=n.id;toast(`Tap the idea that “${n.label}” pushes. Tap empty space to cancel.`,0);render();};
+  panel.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{sel=b.dataset.go;render();renderPanel();});
+  panel.querySelectorAll('[data-lflip]').forEach(b=>b.onclick=()=>{const l=S.links[+b.dataset.lflip];[l.a,l.b]=[l.b,l.a];re();});
+  panel.querySelectorAll('[data-lsign]').forEach(b=>b.onclick=()=>{const l=S.links[+b.dataset.lsign];l.sign=-(l.sign||1);re();});
+  panel.querySelectorAll('[data-lw]').forEach(s=>s.onchange=()=>{S.links[+s.dataset.lw].w=+s.value;save();render();});
+  panel.querySelectorAll('[data-lnote]').forEach(inp=>inp.oninput=()=>{S.links[+inp.dataset.lnote].note=inp.value;save();});
+  panel.querySelectorAll('[data-unlink]').forEach(b=>b.onclick=()=>{S.links.splice(+b.dataset.unlink,1);re();});
+  const bd=$('#b-del'); if(bd) bd.onclick=()=>armed(bd,'Tap again to delete',()=>deleteNode(n.id));
+}
+function deleteNode(id){
+  const gone=new Set([id]); const st=[id]; while(st.length){const x=st.pop();(P[x]?.kids||[]).forEach(k=>{gone.add(k);st.push(k);});}
+  const parent=N[id]?.parent;
+  S.nodes=S.nodes.filter(n=>!gone.has(n.id)); S.links=S.links.filter(l=>!gone.has(l.a)&&!gone.has(l.b));
+  sel=parent||null; mode=sel?'node':(isWide()?'insights':null); save(); render(); renderPanel();
+}
+function armed(btn,label,fn){
+  if(btn.dataset.armed){delete btn.dataset.armed;btn.textContent=btn.dataset.orig;fn();return;}
+  btn.dataset.orig=btn.textContent;btn.dataset.armed='1';btn.textContent=label;
+  setTimeout(()=>{if(btn.dataset.armed){delete btn.dataset.armed;btn.textContent=btn.dataset.orig;}},3000);
+}
+let toastT=0;
+function toast(msg,ms=2600){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);if(ms)toastT=setTimeout(()=>t.hidden=true,ms);}
+const hideToast=()=>{$('#toast').hidden=true;};
+
+/* ---------- outline ---------- */
+function outline(){
+  render(); const root=rootNode(), out=[];
+  const obs=n=>n.obs?` | seen ${GL[n.obs]} ${n.fig||''}${n.src?' ('+n.src+')':''}`:'';
+  const model=n=>n.shock?` | SCENARIO PUSH ${n.shock>0?'UP':'DOWN'}`:dirOf(V[n.id])?` | model ${GL[dirOf(V[n.id])]} ${pct(V[n.id])}`:'';
+  const walk=(id,d)=>{const n=N[id];
+    if(d===0) out.push(`CENTER: ${n.label}${model(n)}${obs(n)}${n.note?' | '+n.note:''}`);
+    else { const par=N[n.parent]; const rel=n.flow==='in'?`${n.label} -> ${par.label}`:`${par.label} -> ${n.label}`;
+      out.push(`${'  '.repeat(d)}${d}° ${n.flow==='in'?'cause':'effect'}: ${n.label} [${rel}, ${n.sign<0?'opposite':'same'} direction, strength ${n.w}/5]${model(n)}${obs(n)}${n.note?' | '+n.note:''}`); }
+    (P[id].kids||[]).forEach(k=>walk(k,d+1));};
+  walk(root.id,0);
+  if(S.links.length){out.push('','CROSS-LINKS:');S.links.forEach(l=>out.push(`  ${N[l.a]?.label} -> ${N[l.b]?.label} [${l.sign<0?'opposite':'same'}, ${l.w}/5]${l.note?' | '+l.note:''}`));}
+  if(SIM.chains.length){out.push('','STRONGEST CHAINS:');SIM.chains.forEach(c=>out.push(`  ${c.path.map(id=>`${N[id].label} ${GL[dirOf(V[id])]||''}`).join(' -> ')}  (end effect ${pct(c.v)})`));}
+  const ch=SIM.checks.filter(c=>c.status==='ok'||c.status==='bad');
+  if(ch.length){out.push('','REALITY CHECK:');ch.forEach(c=>out.push(`  ${c.status==='ok'?'MATCH':'MISMATCH'} ${c.n.label}: model ${GL[c.exp]} ${strength(c.v)}, seen ${GL[c.n.obs]} ${c.n.fig||''}`));}
+  if(SIM.loops.length){out.push('','FEEDBACK LOOPS:');SIM.loops.forEach(l=>out.push(`  ${l.sign>0?'Reinforcing':'Balancing'}: ${l.path.map(id=>N[id].label).join(' -> ')}`));}
+  return out.join('\n');
+}
+let modalLoad=null;
+function openModal(title,txt,{hint='',editable=false,onLoad=null}={}){
+  $('#m-title').textContent=title; $('#m-hint').textContent=hint; $('#m-hint').hidden=!hint;
+  const ta=$('#m-text'); ta.value=txt; ta.readOnly=!editable;
+  modalLoad=onLoad; $('#m-load').hidden=!onLoad; $('#m-copy').hidden=editable;
+  $('#modal').hidden=false; ta.focus(); if(!editable) ta.select();
+}
+$('#m-close').onclick=()=>{$('#modal').hidden=true;};
+$('#m-copy').onclick=()=>{const ta=$('#m-text');ta.select();
+  try{navigator.clipboard.writeText(ta.value).then(()=>toast('Copied.')).catch(()=>toast('Press Ctrl+C or Cmd+C to copy the selected text.'));}catch(e){toast('Press Ctrl+C or Cmd+C to copy the selected text.');}};
+$('#m-load').onclick=()=>{if(modalLoad)modalLoad($('#m-text').value);};
+$('#h-copy').onclick=()=>openModal('Outline',outline(),{hint:'Plain-text version of the map with chains, reality checks and loops. Paste it into a chat to analyze it.'});
+$('#h-export').onclick=()=>{
+  const root=rootNode(); const data=Object.assign({},S,{title:S.title||root.label,updated:new Date().toISOString().slice(0,10)});
+  const slug=(SLUG.startsWith('draft-')?root.label:SLUG).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'my-map';
+  openModal('Map file',JSON.stringify(data,null,2),{hint:`Save this as maps/${slug}.json in the repository and add it to maps/index.json. It will then appear in the map list for everyone.`});
+};
+$('#h-import').onclick=()=>openModal('Import a map','',{editable:true,hint:'Paste a map file (JSON). It replaces the map you are looking at, on this device only.',onLoad:txt=>{
+  try{const d=JSON.parse(txt); if(!Array.isArray(d.nodes)||!Array.isArray(d.links)||!d.nodes.some(n=>!n.parent)) throw 0;
+    S=d; sel=null; mode=isWide()?'insights':null; save(); $('#modal').hidden=true; fit(); renderPanel(); fillPicker(); toast('Map loaded.');}
+  catch(e){toast('That is not a valid map file. It needs "nodes" and "links", and one idea with no parent.',4000);}}});
+$('#h-fit').onclick=()=>fit();
+$('#h-ins').onclick=()=>{mode=mode==='insights'?null:'insights';sel=null;focusPath=null;chainKey=null;render();renderPanel();};
+$('#h-new').onclick=()=>{location.search='?map=draft-'+Date.now().toString(36);};
+$('#h-ex').onclick=e=>armed(e.currentTarget,'Tap again: discards your edits',()=>{S=clone(BASE);sel=null;mode=isWide()?'insights':null;linkFrom=null;focusPath=null;try{localStorage.removeItem(KEY);}catch(e){}fit();renderPanel();fillPicker();toast('Back to the saved file.');});
+$('#h-map').onchange=e=>{location.search='?map='+encodeURIComponent(e.target.value);};
+function drafts(){const out=[];try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PREFIX+'draft-')){try{const d=JSON.parse(localStorage.getItem(k));const r=d.nodes.find(n=>!n.parent);out.push({slug:k.slice(PREFIX.length),title:r?r.label:'Untitled'});}catch(e){}}}}catch(e){}return out;}
+function fillPicker(){
+  const s=$('#h-map'); const list=MAPS.slice(); if(!list.some(m=>m.slug===SLUG)&&!SLUG.startsWith('draft-')) list.push({slug:SLUG,title:rootNode().label});
+  const dr=drafts();
+  s.innerHTML=`<optgroup label="Maps in this repository">${list.map(m=>`<option value="${esc(m.slug)}"${m.slug===SLUG?' selected':''}>${esc(m.title)}</option>`).join('')}</optgroup>`
+    +(dr.length?`<optgroup label="Drafts on this device">${dr.map(m=>`<option value="${esc(m.slug)}"${m.slug===SLUG?' selected':''}>${esc(m.title)}</option>`).join('')}</optgroup>`:'');
+}
+function blank(){const id=uid();return {title:'New topic',nodes:[{id,label:'New topic',parent:null,flow:null,sign:1,w:5,note:'',shock:0,obs:'',fig:'',src:'',url:''}],links:[]};}
+
+/* ---------- view: size, fit, pan, zoom ---------- */
+function size(){W=svg.clientWidth;H=svg.clientHeight;svg.setAttribute('viewBox',`${-W/2} ${-H/2} ${W} ${H}`);}
+function fit(){
+  idx(); layout(); let maxD=0; for(const id in P) if(P[id].d!==undefined) maxD=Math.max(maxD,P[id].d);
+  const ext=ringR(maxD)+(maxD?120:80);
+  const usableW=isWide()&&!$('#panel').hidden?W-380:W;
+  view.k=Math.max(0.12,Math.min(2,Math.min(usableW,H)/(2*ext)));
+  view.x=isWide()&&!$('#panel').hidden?-190:0; view.y=0; render();
+}
+function zoomAt(px,py,f){const k=Math.min(4,Math.max(0.12,view.k*f));f=k/view.k;view.x=px-(px-view.x)*f;view.y=py-(py-view.y)*f;view.k=k;schedule();}
+svg.addEventListener('wheel',e=>{e.preventDefault();const r=svg.getBoundingClientRect();zoomAt(e.clientX-r.left-W/2,e.clientY-r.top-H/2,Math.exp(-e.deltaY*0.0015));},{passive:false});
+const ptrs=new Map(); let drag=null, pinch=null, moved=false;
+svg.addEventListener('pointerdown',e=>{
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){moved=false;drag={x:e.clientX,y:e.clientY,tot:0};pinch=null;}
+  else if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)};drag=null;}
+});
+window.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId)){ if(e.pointerType==='mouse'&&e.target.closest&&!focusPath){const el=e.target.closest('#map .node');const id=el?el.dataset.id:null;if(id!==hover){hover=id;applyFocus();}} return; }
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===2&&pinch){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const r=svg.getBoundingClientRect();
+    zoomAt((a.x+b.x)/2-r.left-W/2,(a.y+b.y)/2-r.top-H/2,d/pinch.d);pinch.d=d;moved=true;return;}
+  if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;drag.tot+=Math.abs(dx)+Math.abs(dy);
+    if(drag.tot>5){moved=true;view.x+=dx;view.y+=dy;schedule();}}
+});
+const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size===1){const [p]=[...ptrs.values()];drag={x:p.x,y:p.y,tot:99};pinch=null;}if(ptrs.size===0){drag=null;pinch=null;}};
+window.addEventListener('pointerup',up); window.addEventListener('pointercancel',up);
+svg.addEventListener('pointerleave',()=>{if(hover){hover=null;applyFocus();}});
+svg.addEventListener('click',e=>{
+  if(moved){moved=false;return;}
+  const el=e.target.closest('.node'), id=el?el.dataset.id:null;
+  if(linkFrom){
+    if(id&&id!==linkFrom){
+      const exists=S.links.some(l=>(l.a===linkFrom&&l.b===id)||(l.b===linkFrom&&l.a===id));
+      if(!exists) S.links.push({a:linkFrom,b:id,sign:1,w:3,note:''});
+      sel=linkFrom; mode='node'; linkFrom=null; save(); toast(exists?'Those two are already linked.':'Linked. Set its direction, sign and strength below.'); render(); renderPanel();
+    } else if(!id){linkFrom=null;hideToast();render();}
+    return;
+  }
+  focusPath=null; chainKey=null;
+  if(id){sel=id;mode='node';} else {sel=null;mode=isWide()?'insights':null;}
+  render(); renderPanel();
+});
+window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
+  if(!$('#modal').hidden){$('#modal').hidden=true;return;}
+  if(linkFrom){linkFrom=null;hideToast();render();return;}
+  sel=null;focusPath=null;chainKey=null;mode=isWide()?'insights':null;render();renderPanel();});
+
+async function boot(){
+  const q=new URLSearchParams(location.search);
+  SLUG=(q.get('map')||'ram-prices').replace(/[^a-zA-Z0-9_-]/g,'')||'ram-prices';
+  KEY=PREFIX+SLUG;
+  try{const r=await fetch('maps/index.json',{cache:'no-store'});if(r.ok)MAPS=await r.json();}catch(e){}
+  if(!Array.isArray(MAPS)||!MAPS.length) MAPS=[{slug:'ram-prices',title:'RAM prices'}];
+  let file=null;
+  if(!SLUG.startsWith('draft-')){try{const r=await fetch('maps/'+SLUG+'.json',{cache:'no-store'});if(r.ok)file=await r.json();}catch(e){}}
+  if(!file&&SLUG==='ram-prices') file=example();
+  if(!file){ if(!SLUG.startsWith('draft-')) toast(`No file maps/${SLUG}.json found. Starting a blank map.`,5000); file=blank(); }
+  BASE=file; S=load()||clone(BASE);
+  const isNew=SLUG.startsWith('draft-')&&S.nodes.length===1;
+  mode=isNew?'node':(isWide()?'insights':null); if(isNew) sel=rootNode().id;
+  idx(); layout(); simulate(); renderPanel();
+  size(); fit(); renderPanel(); fillPicker();
+  document.title=`${rootNode().label} · Thought Orbits`;
+  if(isNew){save();fillPicker();const f=$('#f-label');if(f){f.focus();f.select();}}
+  new ResizeObserver(()=>{const ow=W,oh=H;size();if(ow&&oh)render();}).observe(svg);
+}
+boot();
+</script>
+</body>
+</html>

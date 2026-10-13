@@ -1,0 +1,11 @@
+{
+  "title": "Your topic",
+  "description": "Copy this file to start a new analysis.",
+  "updated": "2026-10-13",
+  "nodes": [
+    {"id": "c", "label": "Your topic", "parent": null, "flow": null, "sign": 1, "w": 5, "note": "What exactly is being measured?", "shock": 0, "obs": "", "fig": "", "src": "", "url": ""},
+    {"id": "a", "label": "A cause", "parent": "c", "flow": "in", "sign": 1, "w": 3, "note": "", "shock": 1, "obs": "", "fig": "", "src": "", "url": ""},
+    {"id": "b", "label": "An effect", "parent": "c", "flow": "out", "sign": 1, "w": 3, "note": "", "shock": 0, "obs": "", "fig": "", "src": "", "url": ""}
+  ],
+  "links": []
+}
